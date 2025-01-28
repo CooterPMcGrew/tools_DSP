@@ -1,0 +1,113 @@
+// DSP Tools in Verilog
+// Author: Cooter McGrew
+
+// This module implements unique digital signal processing (DSP) tools in Verilog.
+// Features include a custom FIR filter and a novel real-time frequency detector.
+
+`timescale 1ns / 1ps
+
+// Module: FIR Filter
+// Implements a Finite Impulse Response filter with customizable coefficients.
+module FIR_Filter #(parameter TAPS = 5, WIDTH = 16)(
+    input wire clk,                // Clock signal
+    input wire rst,                // Reset signal
+    input wire signed [WIDTH-1:0] sample_in, // Input sample
+    output reg signed [WIDTH-1:0] filtered_out // Filtered output
+);
+
+    // Coefficients (hardcoded for simplicity, but can be made configurable)
+    reg signed [WIDTH-1:0] coeffs [0:TAPS-1] = '{16'd3, 16'd7, 16'd10, 16'd7, 16'd3};
+
+    // Shift register to hold previous samples
+    reg signed [WIDTH-1:0] shift_reg [0:TAPS-1];
+
+    integer i;
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            // Reset shift register and output
+            for (i = 0; i < TAPS; i = i + 1) begin
+                shift_reg[i] <= 0;
+            end
+            filtered_out <= 0;
+        end else begin
+            // Shift samples through the register
+            for (i = TAPS-1; i > 0; i = i - 1) begin
+                shift_reg[i] <= shift_reg[i-1];
+            end
+            shift_reg[0] <= sample_in;
+
+            // Calculate the filtered output
+            filtered_out <= 0;
+            for (i = 0; i < TAPS; i = i + 1) begin
+                filtered_out <= filtered_out + (shift_reg[i] * coeffs[i]);
+            end
+        end
+    end
+endmodule
+
+// Module: Real-Time Frequency Detector
+// Analyzes input samples to detect dominant frequency in real time.
+module Frequency_Detector #(parameter WIDTH = 16)(
+    input wire clk,                   // Clock signal
+    input wire rst,                   // Reset signal
+    input wire signed [WIDTH-1:0] sample_in, // Input sample
+    output reg [WIDTH-1:0] frequency_out // Detected frequency
+);
+
+    reg signed [WIDTH-1:0] prev_sample;
+    reg [31:0] zero_cross_count;
+    reg [31:0] sample_count;
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            prev_sample <= 0;
+            zero_cross_count <= 0;
+            sample_count <= 0;
+            frequency_out <= 0;
+        end else begin
+            sample_count <= sample_count + 1;
+
+            // Detect zero crossing
+            if ((sample_in > 0 && prev_sample <= 0) || (sample_in < 0 && prev_sample >= 0)) begin
+                zero_cross_count <= zero_cross_count + 1;
+            end
+
+            prev_sample <= sample_in;
+
+            // Calculate frequency every 1 second (assuming 1 MHz clock)
+            if (sample_count == 1_000_000) begin
+                frequency_out <= zero_cross_count / 2; // Frequency = zero_cross_count / 2 (in Hz)
+                zero_cross_count <= 0;
+                sample_count <= 0;
+            end
+        end
+    end
+endmodule
+
+// Top-level module to connect the FIR filter and frequency detector.
+module DSP_Toolbox (
+    input wire clk,
+    input wire rst,
+    input wire signed [15:0] sample_in,
+    output wire signed [15:0] filtered_out,
+    output wire [15:0] frequency_out
+);
+
+    // Instantiate FIR Filter
+    FIR_Filter #(.TAPS(5), .WIDTH(16)) fir (
+        .clk(clk),
+        .rst(rst),
+        .sample_in(sample_in),
+        .filtered_out(filtered_out)
+    );
+
+    // Instantiate Frequency Detector
+    Frequency_Detector #(.WIDTH(16)) freq_det (
+        .clk(clk),
+        .rst(rst),
+        .sample_in(filtered_out),
+        .frequency_out(frequency_out)
+    );
+
+endmodule
