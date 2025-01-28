@@ -1,0 +1,121 @@
+// DSP Toolbox in Rust
+// Author: Cooter McGrew
+
+// This toolbox provides a collection of unique digital signal processing (DSP) tools
+// for various applications, including audio processing, filtering, and spectral analysis.
+
+use std::f32::consts::PI;
+
+// Utility function to generate a sine wave.
+// - `frequency`: Frequency of the sine wave in Hz.
+// - `sample_rate`: Number of samples per second.
+// - `duration`: Duration of the signal in seconds.
+// Returns a vector of samples.
+fn generate_sine_wave(frequency: f32, sample_rate: usize, duration: f32) -> Vec<f32> {
+    let num_samples = (sample_rate as f32 * duration) as usize;
+    (0..num_samples)
+        .map(|n| {
+            let t = n as f32 / sample_rate as f32; // Time for the current sample.
+            (2.0 * PI * frequency * t).sin()      // Calculate the sine wave value.
+        })
+        .collect()
+}
+
+// Utility function to compute the Fast Fourier Transform (FFT) using the Cooley-Tukey algorithm.
+// - `input`: A vector of complex numbers (input signal).
+// Returns the FFT result as a vector of complex numbers.
+fn fft(input: &mut [num_complex::Complex<f32>]) {
+    let n = input.len();
+    if n <= 1 {
+        return;
+    }
+
+    // Split input into even and odd components.
+    let mut even = input.iter().step_by(2).copied().collect::<Vec<_>>();
+    let mut odd = input.iter().skip(1).step_by(2).copied().collect::<Vec<_>>();
+
+    fft(&mut even);
+    fft(&mut odd);
+
+    for k in 0..n / 2 {
+        let t = num_complex::Complex::from_polar(&1.0, &(-2.0 * PI * k as f32 / n as f32)) * odd[k];
+        input[k] = even[k] + t;
+        input[k + n / 2] = even[k] - t;
+    }
+}
+
+// Unique DSP Tool: Adaptive Notch Filter
+// - Removes a specific frequency dynamically from a signal.
+// - `signal`: The input signal.
+// - `target_frequency`: The frequency to remove in Hz.
+// - `sample_rate`: The sample rate of the signal.
+// - `bandwidth`: The width of the notch in Hz.
+// Returns the filtered signal.
+fn adaptive_notch_filter(
+    signal: &[f32],
+    target_frequency: f32,
+    sample_rate: usize,
+    bandwidth: f32,
+) -> Vec<f32> {
+    let mut filtered_signal = signal.to_vec();
+    let omega = 2.0 * PI * target_frequency / sample_rate as f32;
+    let alpha = (PI * bandwidth / sample_rate as f32).sin();
+
+    // Filter coefficients.
+    let b0 = 1.0;
+    let b1 = -2.0 * omega.cos();
+    let b2 = 1.0;
+    let a0 = 1.0 + alpha;
+    let a1 = -2.0 * omega.cos();
+    let a2 = 1.0 - alpha;
+
+    // Apply the filter using the difference equation.
+    let mut y_prev1 = 0.0;
+    let mut y_prev2 = 0.0;
+    let mut x_prev1 = 0.0;
+    let mut x_prev2 = 0.0;
+
+    for (i, &x) in signal.iter().enumerate() {
+        let y = (b0 * x + b1 * x_prev1 + b2 * x_prev2 - a1 * y_prev1 - a2 * y_prev2) / a0;
+        filtered_signal[i] = y;
+
+        x_prev2 = x_prev1;
+        x_prev1 = x;
+        y_prev2 = y_prev1;
+        y_prev1 = y;
+    }
+
+    filtered_signal
+}
+
+fn main() {
+    // Example usage of DSP Toolbox tools.
+
+    // Generate a sine wave.
+    let frequency = 440.0; // A4 note frequency in Hz.
+    let sample_rate = 44100; // Standard audio sample rate.
+    let duration = 2.0; // 2 seconds.
+    let sine_wave = generate_sine_wave(frequency, sample_rate, duration);
+
+    println!("Generated a sine wave with {} samples.", sine_wave.len());
+
+    // Apply the adaptive notch filter to remove the A4 frequency.
+    let filtered_signal = adaptive_notch_filter(&sine_wave, frequency, sample_rate, 5.0);
+
+    println!("Applied adaptive notch filter to the signal.");
+
+    // Perform FFT on the filtered signal.
+    let mut complex_signal: Vec<_> = filtered_signal
+        .iter()
+        .map(|&x| num_complex::Complex::new(x, 0.0))
+        .collect();
+
+    fft(&mut complex_signal);
+
+    println!("Computed FFT on the filtered signal.");
+
+    // Future tools to add:
+    // - Windowing functions (Hann, Hamming, etc.).
+    // - Dynamic range compressors and expanders.
+    // - Spectrogram generator.
+}
