@@ -1,0 +1,99 @@
+// Neural Network for DSP/ASP in Verilog
+// Author: Cooter McGrew
+
+// This module implements a simple neural network for Digital Signal Processing (DSP)
+// or Audio Signal Processing (ASP) with tunable parameters. The neural network can be used
+// for tasks like noise reduction, equalization, or other signal transformations.
+
+`timescale 1ns / 1ps
+
+// Module: Tunable Neural Network for DSP
+module NeuralNetworkDSP #(parameter INPUTS = 4, HIDDEN_NODES = 8, OUTPUTS = 1, WIDTH = 16)(
+    input wire clk,                             // Clock signal
+    input wire rst,                             // Reset signal
+    input wire signed [WIDTH-1:0] input_signal, // Input signal
+    input wire [WIDTH-1:0] tune_parameters [0:INPUTS-1], // Tunable weights for the input layer
+    output reg signed [WIDTH-1:0] output_signal // Output signal
+);
+
+    // Input layer to hidden layer weights
+    reg signed [WIDTH-1:0] input_weights [0:INPUTS-1][0:HIDDEN_NODES-1];
+    // Hidden layer biases
+    reg signed [WIDTH-1:0] hidden_biases [0:HIDDEN_NODES-1];
+    // Hidden layer outputs
+    reg signed [WIDTH-1:0] hidden_outputs [0:HIDDEN_NODES-1];
+    // Hidden to output weights
+    reg signed [WIDTH-1:0] output_weights [0:HIDDEN_NODES-1];
+    // Output bias
+    reg signed [WIDTH-1:0] output_bias;
+
+    integer i, j;
+
+    // Initialization of weights and biases
+    initial begin
+        // Random or preset values for weights and biases.
+        for (i = 0; i < INPUTS; i = i + 1) begin
+            for (j = 0; j < HIDDEN_NODES; j = j + 1) begin
+                input_weights[i][j] = $random % 256; // Random initialization
+            end
+        end
+
+        for (i = 0; i < HIDDEN_NODES; i = i + 1) begin
+            hidden_biases[i] = $random % 128; // Random initialization
+            output_weights[i] = $random % 128; // Random initialization
+        end
+
+        output_bias = $random % 64; // Random initialization
+    end
+
+    // Forward propagation
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            output_signal <= 0;
+        end else begin
+            // Compute hidden layer outputs
+            for (i = 0; i < HIDDEN_NODES; i = i + 1) begin
+                hidden_outputs[i] = hidden_biases[i];
+                for (j = 0; j < INPUTS; j = j + 1) begin
+                    hidden_outputs[i] = hidden_outputs[i] + (input_signal * input_weights[j][i]);
+                end
+
+                // Apply activation function (ReLU for simplicity)
+                if (hidden_outputs[i] < 0) begin
+                    hidden_outputs[i] = 0;
+                end
+            end
+
+            // Compute output layer
+            output_signal = output_bias;
+            for (i = 0; i < HIDDEN_NODES; i = i + 1) begin
+                output_signal = output_signal + (hidden_outputs[i] * output_weights[i]);
+            end
+        end
+    end
+
+endmodule
+
+// Top-Level DSP Neural Network Controller
+module DSP_Neural_Controller (
+    input wire clk,
+    input wire rst,
+    input wire signed [15:0] input_signal,
+    input wire [15:0] tune_parameters [0:3], // Example tunable parameters
+    output wire signed [15:0] output_signal
+);
+
+    NeuralNetworkDSP #(
+        .INPUTS(4),
+        .HIDDEN_NODES(8),
+        .OUTPUTS(1),
+        .WIDTH(16)
+    ) nn_dsp (
+        .clk(clk),
+        .rst(rst),
+        .input_signal(input_signal),
+        .tune_parameters(tune_parameters),
+        .output_signal(output_signal)
+    );
+
+endmodule
